@@ -4,7 +4,6 @@ data/
 *.gpkg
 *.xml
 *.geojson
-*.ipynb
 
 # Cache Python
 __pycache__/
