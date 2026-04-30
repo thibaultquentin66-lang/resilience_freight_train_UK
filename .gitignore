@@ -1,1 +1,11 @@
+# Big data
+data/
+*.csv
+*.gpkg
+*.xml
+*.geojson
+*.ipynb
+
+# Cache Python
+__pycache__/
 
