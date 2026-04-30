@@ -126,3 +126,77 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 
     a = np.sin(dlat/2)**2 + np.cos(lat1)*np.cos(lat2)*np.sin(dlon/2)**2
     return 2 * R * np.arcsin(np.sqrt(a))
+
+#Detect is components should be added or not based on multiple criteria
+#Functions to be used in the final function important_component:
+
+
+def component_bbox_miles(coords):
+    lons = coords[:,0]
+    lats = coords[:,1]
+    min_lon, max_lon = lons.min(), lons.max()
+    min_lat, max_lat = lats.min(), lats.max()
+
+    # approx: 1° lat = 69 miles, 1° lon = 69 * cos(lat)
+    lat_miles = (max_lat - min_lat) * 69
+    lon_miles = (max_lon - min_lon) * 69 * np.cos(np.radians(coords[:,1].mean()))
+
+    return lon_miles, lat_miles
+
+#inimum distance between two components
+def min_distance_between_components(coords1, coords2, tree):
+
+    min_dist = float('inf')
+
+    for lon2, lat2 in coords2:
+        #Closest point to the compoment
+        dist, idx = tree.query([lon2, lat2], k=1)
+        lon1, lat1 = coords1[idx]
+
+        d = haversine_distance(lat1, lon1, lat2, lon2)
+
+        if d < min_dist:
+            min_dist = d
+
+    return min_dist
+
+#Checck if a compoment needs to be kept or not
+def is_important_component(
+        G, component, stations, main_coords, main_tree,
+        min_line_length=2.0,
+        max_small_size=0.3,
+        near_main_threshold=0.1,
+        reconnect_threshold=0.05
+    ):
+    
+    #Extract coordinates
+    coords = np.array([n for n in component if isinstance(n, tuple)])
+    if len(coords) == 0:
+        return False
+
+    #Compute bounding boxes
+    width_miles, height_miles = component_bbox_miles(coords)
+    max_dim = max(width_miles, height_miles)
+
+    #Long line = we keep it
+    if max_dim >= min_line_length:
+        return True
+
+    #Contains 1 station at least = we keep it
+    if any(n in stations for n in component):
+        return True
+
+    #Close to the main component = we keep it
+    dist_to_main = min_distance_between_components(main_coords, coords, main_tree)
+    if dist_to_main <= near_main_threshold:
+        return True
+
+    #Little and far component = we don't keep it
+    if max_dim <= max_small_size and dist_to_main > near_main_threshold:
+        return False
+
+    #If small but really near to the main component = we keep it
+    if dist_to_main <= reconnect_threshold:
+        return True
+
+    return False
