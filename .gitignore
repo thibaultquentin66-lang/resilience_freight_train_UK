@@ -5,6 +5,7 @@ data/
 *.xml
 *.geojson
 *.html
+*.gpickle
 
 # Cache Python
 __pycache__/
