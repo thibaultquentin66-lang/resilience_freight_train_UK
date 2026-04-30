@@ -4,7 +4,7 @@ data/
 *.gpkg
 *.xml
 *.geojson
+*.html
 
 # Cache Python
 __pycache__/
-
