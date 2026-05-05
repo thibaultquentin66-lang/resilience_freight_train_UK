@@ -82,18 +82,18 @@ def neighbour_gauge(gdf_rail, gdf_osm):
     joined = joined[~joined.index.duplicated(keep='first')]
 
     #Propagation to the neighbours
-    inconnu = joined[joined['loading_gauge_val'].isna()].copy()
-    connu = joined[joined['loading_gauge_val'].notna()][['loading_gauge_val', 'geometry']]
+    unknown = joined[joined['loading_gauge_val'].isna()].copy()
+    known = joined[joined['loading_gauge_val'].notna()][['loading_gauge_val', 'geometry']]
     
-    if not inconnu.empty and not connu.empty:
-        inconnu = inconnu.drop(columns=[c for c in cols_to_drop if c in inconnu.columns])
+    if not unknown.empty and not known.empty:
+        unknown = unknown.drop(columns=[c for c in cols_to_drop if c in unknown.columns])
         
         #We create a buffer (a 1 meter zone) to ensure rail's connection
-        inconnu['geom_buffer'] = inconnu.geometry.buffer(0.00001) 
-        temp_inconnu = gpd.GeoDataFrame(inconnu, geometry='geom_buffer', crs=joined.crs)
+        unknown['geom_buffer'] = unknown.geometry.buffer(0.00001) 
+        temp_unknown = gpd.GeoDataFrame(unknown, geometry='geom_buffer', crs=joined.crs)
         
         #We internaly join
-        spatial_hit = gpd.sjoin(temp_inconnu, connu, how='left', predicate='intersects')
+        spatial_hit = gpd.sjoin(temp_unknown, known, how='left', predicate='intersects')
         
         #We take back the loading gauge value
         if 'loading_gauge_val_right' in spatial_hit.columns:
