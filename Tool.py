@@ -25,7 +25,7 @@ def clean_speed(df):
 
 #Clean tracks column
 def fill_tracks(df):
-    
+
     usage = df["usage"].fillna("").str.lower()
     
     def compute_tracks(row):
@@ -104,7 +104,6 @@ def neighbour_gauge(gdf_rail, gdf_osm):
 
 #Decide the loading gauge based on voltage if no neighbours were found
 def final_gauge(row):
-    """Décide de la valeur finale : OSM > Voltage > Défaut."""
     if pd.notna(row['loading_gauge_val']):
         return row['loading_gauge_val']
     
@@ -113,7 +112,7 @@ def final_gauge(row):
     if '750' in volt: return 7
     return 6
 
-    #Compute the distance between to points 
+#Compute the distance between to points 
 def haversine_distance(lat1, lon1, lat2, lon2):
     R = 3958.8  # miles
     lat1 = np.radians(lat1)
@@ -143,7 +142,7 @@ def component_bbox_miles(coords):
 
     return lon_miles, lat_miles
 
-#inimum distance between two components
+#Minimum distance between two components
 def min_distance_between_components(coords1, coords2, tree):
 
     min_dist = float('inf')
