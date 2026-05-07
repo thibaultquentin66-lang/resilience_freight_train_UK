@@ -199,3 +199,36 @@ def is_important_component(
         return True
 
     return False
+
+#Get the STANOX in a selected bounding box
+def get_stanox_from_bbox(G, bbox):
+    min_lat, min_lon, max_lat, max_lon = bbox
+    prefixes = set()
+
+    for n, d in G.nodes(data=True):
+        if d.get("type") == "station" and d.get("stanox") is not None:
+            lat, lon = d["lat"], d["lon"]
+            if min_lat <= lat <= max_lat and min_lon <= lon <= max_lon:
+                prefixes.add(str(d["stanox"])[:2])
+
+    return sorted(prefixes)
+
+#Create a subgraph based on STANOX
+def subgraph_by_stanox(G, prefixes):
+    prefixes = tuple(prefixes)
+
+    station_nodes = [
+        n for n, d in G.nodes(data=True)
+        if d.get("type") == "station"
+        and d.get("stanox") is not None
+        and str(d["stanox"]).startswith(prefixes)
+    ]
+
+    osm_nodes = set()
+    for s in station_nodes:
+        for neigh in G.neighbors(s):
+            if G[s][neigh].get("type") == "station_link":
+                osm_nodes.add(neigh)
+
+    sub_nodes = set(station_nodes) | osm_nodes
+    return G.subgraph(sub_nodes).copy()
