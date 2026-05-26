@@ -199,3 +199,94 @@ def is_important_component(
         return True
 
     return False
+
+#Analyse resilience through a random and targeted nodes removal
+def resilience_node(G, max_retrait=120, pas=5):
+    import random
+    import networkx as nx
+
+    N_total = len(G.nodes())
+    closeness_dict = nx.closeness_centrality(G, distance='length')
+    noeuds_cibles = [n for n, score in sorted(closeness_dict.items(), key=lambda x: x[1], reverse=True)]
+    
+
+    noeuds_aleatoires = list(G.nodes())
+    random.shuffle(noeuds_aleatoires)
+    
+    lcc_random = [100.0]
+    lcc_targeted = [100.0]
+    X_noeuds = [0]
+    
+    #Random
+    G_rand = G.copy()
+    for i in range(0, max_retrait, pas):
+        noeuds_a_retirer = noeuds_aleatoires[i:i+pas]
+        G_rand.remove_nodes_from(noeuds_a_retirer)
+        if len(G_rand) > 0:
+            taille_lcc = len(max(nx.connected_components(G_rand), key=len)) / N_total * 100
+            lcc_random.append(taille_lcc)
+        else:
+            lcc_random.append(0)
+            
+    #Targeted (closeness)
+    G_target = G.copy()
+    for i in range(0, max_retrait, pas):
+        noeuds_a_retirer = noeuds_cibles[i:i+pas]
+        G_target.remove_nodes_from(noeuds_a_retirer)
+        if len(G_target) > 0:
+            taille_lcc = len(max(nx.connected_components(G_target), key=len)) / N_total * 100
+            lcc_targeted.append(taille_lcc)
+        else:
+            lcc_targeted.append(0)
+            
+        X_noeuds.append(i + pas)
+        
+    return X_noeuds, lcc_random, lcc_targeted
+
+#Analyse resilience through a random and targeted nodes removal
+def resilience_edge(G, max_retrait_edges=500, pas=20):
+    import random
+    import networkx as nx
+    
+    N_total_nodes = len(G.nodes())
+    closeness_dict = nx.closeness_centrality(G, distance='length')
+    
+    edges_scores = {}
+    for u, v in G.edges():
+        score_edge = closeness_dict.get(u, 0) + closeness_dict.get(v, 0)
+        edges_scores[(u, v)] = score_edge
+        
+    edges_cibles = [e for e, score in sorted(edges_scores.items(), key=lambda x: x[1], reverse=True)]
+    
+    edges_aleatoires = list(G.edges())
+    random.shuffle(edges_aleatoires)
+    
+    lcc_random = [100.0]
+    lcc_targeted = [100.0]
+    X_edges = [0]
+    
+    G_rand = G.copy()
+    for i in range(0, max_retrait_edges, pas):
+        edges_a_retirer = edges_aleatoires[i:i+pas]
+        G_rand.remove_edges_from(edges_a_retirer)
+        if len(G_rand) > 0:
+            # On mesure toujours la taille de la composante géante de nœuds restants connectés
+            taille_lcc = len(max(nx.connected_components(G_rand), key=len)) / N_total_nodes * 100
+            lcc_random.append(taille_lcc)
+        else:
+            lcc_random.append(0)
+            
+    # Simulation Ciblée (Targeted Edge Removal)
+    G_target = G.copy()
+    for i in range(0, max_retrait_edges, pas):
+        edges_a_retirer = edges_cibles[i:i+pas]
+        G_target.remove_edges_from(edges_a_retirer)
+        if len(G_target) > 0:
+            taille_lcc = len(max(nx.connected_components(G_target), key=len)) / N_total_nodes * 100
+            lcc_targeted.append(taille_lcc)
+        else:
+            lcc_targeted.append(0)
+            
+        X_edges.append(i + pas)
+        
+    return X_edges, lcc_random, lcc_targeted
