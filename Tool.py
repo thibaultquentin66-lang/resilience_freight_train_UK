@@ -3,6 +3,9 @@ import numpy as np
 import geopandas as gpd
 from shapely.wkt import loads
 import re
+import random
+import networkx as nx
+import ast
 
 #Clean speed column
 def clean_speed(df):
@@ -202,8 +205,6 @@ def is_important_component(
 
 #Analyse resilience through a random and targeted nodes removal
 def resilience_node(G, max_retrait=120, pas=5):
-    import random
-    import networkx as nx
 
     N_total = len(G.nodes())
     closeness_dict = nx.closeness_centrality(G, distance='length')
@@ -245,9 +246,7 @@ def resilience_node(G, max_retrait=120, pas=5):
 
 #Analyse resilience through a random and targeted nodes removal
 def resilience_edge(G, max_retrait_edges=500, pas=20):
-    import random
-    import networkx as nx
-    
+
     N_total_nodes = len(G.nodes())
     closeness_dict = nx.closeness_centrality(G, distance='length')
     
@@ -290,3 +289,192 @@ def resilience_edge(G, max_retrait_edges=500, pas=20):
         X_edges.append(i + pas)
         
     return X_edges, lcc_random, lcc_targeted
+
+#Fin the closest node in a graph
+def closest_node(graphe, coord_cible):
+    def extract_coord(n):
+        if isinstance(n, (tuple, list)) and len(n) >= 2:
+            return float(n[0]), float(n[1])
+        elif isinstance(n, str) and n.startswith('(') and n.endswith(')'):
+            try:
+                t = ast.literal_eval(n)
+                return float(t[0]), float(t[1])
+            except:
+                pass
+
+        data = graphe.nodes[n]
+        return float(data.get('lon', 0)), float(data.get('lat', 0))
+
+    return min(
+        graphe.nodes(), 
+        key=lambda n: (extract_coord(n)[0] - coord_cible[0])**2 + (extract_coord(n)[1] - coord_cible[1])**2
+    )
+
+#Enumerate all usable paths between 2 nodes
+def count_feasible_route(graph, source, target, max_extra_stops=25, max_routes=10):
+    if not nx.has_path(graph, source, target):
+        return 0
+    try:
+        main_path = nx.shortest_path(graph, source, target, weight='distance_miles')
+        main_stops = len(main_path) - 1
+        max_allowed_stops = main_stops + max_extra_stops
+        
+        G_temp = graph.copy()
+        feasible_count = 0
+        
+        while feasible_count < max_routes:
+            if not nx.has_path(G_temp, source, target):
+                break
+            current_path = nx.shortest_path(G_temp, source, target, weight='distance_miles')
+            current_stops = len(current_path) - 1
+            if current_stops > max_allowed_stops:
+                break
+            if feasible_count > 0 or current_path != main_path:
+                feasible_count += 1
+            
+            if len(current_path) > 2:
+                mid = len(current_path) // 2
+                u, v = current_path[mid], current_path[mid+1]
+                if G_temp.has_edge(u, v):
+                    G_temp.remove_edges_from(list(G_temp.edges(u, v)))
+            else:
+                u, v = current_path[0], current_path[1]
+                G_temp.remove_edges_from(list(G_temp.edges(u, v)))
+        return feasible_count
+    except Exception:
+        return 0
+
+#Enumerate all usable paths between 2 nodes with loading gauge constraints
+def count_compatible_route(graph, source, target, max_extra_stops=25, max_routes=10):
+    if not nx.has_path(graph, source, target):
+        return 0
+    try:
+        main_path = nx.shortest_path(graph, source, target, weight='distance_miles')
+        main_stops = len(main_path) - 1
+        
+        gauges_on_path = []
+        for u, v in zip(main_path[:-1], main_path[1:]):
+            edge_data = graph[u][v]
+            if isinstance(edge_data, dict) and 0 in edge_data: 
+                edge_data = edge_data[0]
+            g = edge_data.get('loading_gauge', 0)
+            if g > 0:
+                gauges_on_path.append(g)
+        
+        required_gauge = min(gauges_on_path) if gauges_on_path else 6.0
+        
+        compatible_edges = []
+        for u, v, d in graph.edges(data=True):
+            edge_gauge = d.get('loading_gauge', 0)
+            if edge_gauge == 0 or edge_gauge >= required_gauge:
+                compatible_edges.append((u, v, d))
+                
+        G_compatible = nx.Graph()
+        G_compatible.add_nodes_from(graph.nodes(data=True))
+        G_compatible.add_edges_from(compatible_edges)
+        
+        feasible_count = 0
+        max_allowed_stops = main_stops + max_extra_stops
+        
+        while feasible_count < max_routes:
+            if not nx.has_path(G_compatible, source, target):
+                break
+            current_path = nx.shortest_path(G_compatible, source, target, weight='distance_miles')
+            current_stops = len(current_path) - 1
+            if current_stops > max_allowed_stops:
+                break
+            if feasible_count > 0 or current_path != main_path:
+                feasible_count += 1
+                
+            if len(current_path) > 2:
+                mid = len(current_path) // 2
+                u_cut, v_cut = current_path[mid], current_path[mid+1]
+                G_compatible.remove_edges_from(list(G_compatible.edges(u_cut, v_cut)))
+            else:
+                u_cut, v_cut = current_path[0], current_path[1]
+                G_compatible.remove_edges_from(list(G_compatible.edges(u_cut, v_cut)))
+        return feasible_count
+    except Exception:
+        return 0
+
+#Compute travel distance and time variations between baseline and alternative routes with loading gauge constraints
+def calculate_travel_cost(graph, source, target, max_extra_stops=25):
+    if not nx.has_path(graph, source, target):
+        return None
+        
+    try:
+        #Baseline route
+        main_path = nx.shortest_path(graph, source, target, weight='distance_miles')
+        main_stops = len(main_path) - 1
+        
+        gauges_on_path = []
+        main_time_min = 0
+        
+        for u, v in zip(main_path[:-1], main_path[1:]):
+            edge_data = graph[u][v]
+            if isinstance(edge_data, dict) and 0 in edge_data: 
+                edge_data = edge_data[0]
+            
+            g = edge_data.get('loading_gauge', 0)
+            if g > 0: 
+                gauges_on_path.append(g)
+            
+            #Travel time with speed
+            dist = edge_data.get('distance_miles', 0)
+            speed = edge_data.get('maxspeed', 60.0)
+            if speed <= 0: 
+                speed = 60.0
+            main_time_min += (dist / speed) * 60
+            
+        #Loading gauge constraints
+        required_gauge = min(gauges_on_path) if gauges_on_path else 6.0
+        main_dist = nx.path_weight(graph, main_path, weight='distance_miles')
+        
+        compatible_edges = []
+        for u, v, d in graph.edges(data=True):
+            edge_gauge = d.get('loading_gauge', 0)
+            if edge_gauge == 0 or edge_gauge >= required_gauge:
+                compatible_edges.append((u, v, d))
+                
+        G_compatible = nx.Graph()
+        G_compatible.add_nodes_from(graph.nodes(data=True))
+        G_compatible.add_edges_from(compatible_edges)
+        
+        #Remove the middle edge to simulate a disruption
+        if len(main_path) > 2:
+            mid = len(main_path) // 2
+            u_cut, v_cut = main_path[mid], main_path[mid+1]
+            G_compatible.remove_edges_from(list(G_compatible.edges(u_cut, v_cut)))
+        else:
+            u_cut, v_cut = main_path[0], main_path[1]
+            G_compatible.remove_edges_from(list(G_compatible.edges(u_cut, v_cut)))
+            
+        #Alternative routes
+        if nx.has_path(G_compatible, source, target):
+            alt_path = nx.shortest_path(G_compatible, source, target, weight='distance_miles')
+            alt_stops = len(alt_path) - 1
+            
+            if alt_stops <= (main_stops + max_extra_stops):
+                alt_dist = nx.path_weight(G_compatible, alt_path, weight='distance_miles')
+                
+                #Travel time
+                alt_time_min = 0
+                for u, v in zip(alt_path[:-1], alt_path[1:]):
+                    e_data = G_compatible[u][v]
+                    if isinstance(e_data, dict) and 0 in e_data: 
+                        e_data = e_data[0]
+                    d_miles = e_data.get('distance_miles', 0)
+                    v_mph = e_data.get('maxspeed', 60.0)
+                    if v_mph <= 0: 
+                        v_mph = 60.0
+                    alt_time_min += (d_miles / v_mph) * 60
+                    
+                extra_dist = max(0.0, alt_dist - main_dist)
+                extra_time = max(0.0, alt_time_min - main_time_min)
+                
+                return extra_dist, extra_time
+                
+        return None
+        
+    except Exception:
+        return None
