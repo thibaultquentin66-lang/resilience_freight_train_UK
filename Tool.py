@@ -6,6 +6,7 @@ import re
 import random
 import networkx as nx
 import ast
+from scipy.spatial import KDTree
 
 #Clean speed column
 def clean_speed(df):
@@ -403,78 +404,191 @@ def calculate_travel_cost(graph, source, target, max_extra_stops=25):
         return None
         
     try:
-        #Baseline route
-        main_path = nx.shortest_path(graph, source, target, weight='distance_miles')
+        # 1. Itinéraire de référence (Baseline)
+        main_path = nx.shortest_path(graph, source, target, weight='distance')
         main_stops = len(main_path) - 1
         
         gauges_on_path = []
+        main_dist = 0
         main_time_min = 0
         
+        # Parcours manuel de la baseline pour éviter nx.path_weight
         for u, v in zip(main_path[:-1], main_path[1:]):
             edge_data = graph[u][v]
             if isinstance(edge_data, dict) and 0 in edge_data: 
                 edge_data = edge_data[0]
+            elif hasattr(graph, 'is_multigraph') and graph.is_multigraph():
+                edge_data = edge_data[list(edge_data.keys())[0]]
             
             g = edge_data.get('loading_gauge', 0)
             if g > 0: 
                 gauges_on_path.append(g)
             
-            #Travel time with speed
-            dist = edge_data.get('distance_miles', 0)
+            dist = edge_data.get('distance', 0)
             speed = edge_data.get('maxspeed', 60.0)
             if speed <= 0: 
                 speed = 60.0
+                
+            main_dist += dist
             main_time_min += (dist / speed) * 60
             
-        #Loading gauge constraints
-        required_gauge = min(gauges_on_path) if gauges_on_path else 6.0
-        main_dist = nx.path_weight(graph, main_path, weight='distance_miles')
+        required_gauge = min(gauges_on_path) if gauges_on_path else 0.0
         
-        compatible_edges = []
-        for u, v, d in graph.edges(data=True):
-            edge_gauge = d.get('loading_gauge', 0)
-            if edge_gauge == 0 or edge_gauge >= required_gauge:
-                compatible_edges.append((u, v, d))
-                
-        G_compatible = nx.Graph()
+        # 2. Construction du graphe compatible
+        G_compatible = nx.MultiGraph() if graph.is_multigraph() else nx.Graph()
         G_compatible.add_nodes_from(graph.nodes(data=True))
-        G_compatible.add_edges_from(compatible_edges)
         
-        #Remove the middle edge to simulate a disruption
+        for u, v, k, d in graph.edges(keys=True, data=True) if graph.is_multigraph() else ((u,v,0,d) for u,v,d in graph.edges(data=True)):
+            edge_gauge = d.get('loading_gauge', 0)
+            if required_gauge == 0.0 or edge_gauge == 0 or edge_gauge >= required_gauge:
+                if graph.is_multigraph():
+                    G_compatible.add_edge(u, v, key=k, **d)
+                else:
+                    G_compatible.add_edge(u, v, **d)
+                    
+        # 3. Simulation de la coupure (section centrale)
         if len(main_path) > 2:
             mid = len(main_path) // 2
             u_cut, v_cut = main_path[mid], main_path[mid+1]
-            G_compatible.remove_edges_from(list(G_compatible.edges(u_cut, v_cut)))
         else:
             u_cut, v_cut = main_path[0], main_path[1]
-            G_compatible.remove_edges_from(list(G_compatible.edges(u_cut, v_cut)))
             
-        #Alternative routes
+        if G_compatible.has_edge(u_cut, v_cut):
+            if G_compatible.is_multigraph():
+                keys = list(G_compatible[u_cut][v_cut].keys())
+                for k in keys:
+                    G_compatible.remove_edge(u_cut, v_cut, key=k)
+            else:
+                G_compatible.remove_edge(u_cut, v_cut)
+                
+        # 4. Calcul de l'itinéraire alternatif
         if nx.has_path(G_compatible, source, target):
-            alt_path = nx.shortest_path(G_compatible, source, target, weight='distance_miles')
+            alt_path = nx.shortest_path(G_compatible, source, target, weight='distance')
             alt_stops = len(alt_path) - 1
             
             if alt_stops <= (main_stops + max_extra_stops):
-                alt_dist = nx.path_weight(G_compatible, alt_path, weight='distance_miles')
-                
-                #Travel time
+                alt_dist = 0
                 alt_time_min = 0
+                
+                # Parcours manuel de l'alternative
                 for u, v in zip(alt_path[:-1], alt_path[1:]):
                     e_data = G_compatible[u][v]
                     if isinstance(e_data, dict) and 0 in e_data: 
                         e_data = e_data[0]
-                    d_miles = e_data.get('distance_miles', 0)
+                    elif hasattr(G_compatible, 'is_multigraph') and G_compatible.is_multigraph():
+                        e_data = e_data[list(e_data.keys())[0]]
+                        
+                    d_miles = e_data.get('distance', 0)
                     v_mph = e_data.get('maxspeed', 60.0)
                     if v_mph <= 0: 
                         v_mph = 60.0
+                        
+                    alt_dist += d_miles
                     alt_time_min += (d_miles / v_mph) * 60
                     
                 extra_dist = max(0.0, alt_dist - main_dist)
                 extra_time = max(0.0, alt_time_min - main_time_min)
                 
-                return extra_dist, extra_time
+                return {'Extra_Miles': extra_dist, 'Extra_Minutes': extra_time}
                 
         return None
-        
-    except Exception:
+    except Exception as e:
+        print(f"Erreur résiduelle bloquante : {e}")
         return None
+
+#Generate a copy of a graph with a disruption applied
+def generate_disrupted_graph(input_graph, mode="flow"):
+    disrupted_graph = input_graph.copy()
+    
+    if mode == "flow":
+        try:
+            max_flow = -1
+            selected_edge = None
+            
+            if input_graph.is_multigraph():
+                for u, v, key, data in input_graph.edges(keys=True, data=True):
+                    current_flow = data.get('traffic_flow', 0)
+                    if current_flow > max_flow:
+                        max_flow = current_flow
+                        selected_edge = (u, v, key)
+            else:
+                for u, v, data in input_graph.edges(data=True):
+                    current_flow = data.get('traffic_flow', 0)
+                    if current_flow > max_flow:
+                        max_flow = current_flow
+                        selected_edge = (u, v, None)
+                    
+            if selected_edge:
+                node_A, node_B, edge_key = selected_edge
+                name_A = input_graph.nodes[node_A].get('name', f"STANOX: {input_graph.nodes[node_A].get('stanox')}")
+                name_B = input_graph.nodes[node_B].get('name', f"STANOX: {input_graph.nodes[node_B].get('stanox')}")
+                
+                print(f"Critical link: {name_A} <--> {name_B}")
+                print(f"Traffic Volume removed: {max_flow}")
+                
+                if edge_key is not None:
+                    disrupted_graph.remove_edge(node_A, node_B, key=edge_key)
+                else:
+                    disrupted_graph.remove_edge(node_A, node_B)
+            else:
+                print("No flow detected")
+                
+        except Exception as e:
+            print("Error during max flow edge removal:", e)
+            
+    elif mode == "random":
+        try:
+            toutes_les_aretes = list(input_graph.edges(keys=True if input_graph.is_multigraph() else False))
+            
+            if toutes_les_aretes:
+                edge_aleatoire = random.choice(toutes_les_aretes)
+                
+                if len(edge_aleatoire) == 3:
+                    u, v, key = edge_aleatoire
+                    disrupted_graph.remove_edge(u, v, key=key)
+                else:
+                    u, v = edge_aleatoire
+                    disrupted_graph.remove_edge(u, v)
+                    
+                name_u = input_graph.nodes[u].get('name', u)
+                name_v = input_graph.nodes[v].get('name', v)
+                print(f"Random link removed: {name_u} <--> {name_v}")
+            else:
+                print("No edges to remove")
+                
+        except Exception as e:
+            print("Error during random edge removal:", e)
+
+    return disrupted_graph
+
+#Tag nodes and associate STANOX code
+def tag_graph_with_kdtree(G_target, stations_ref, max_distance_degrees=0.002):
+    target_nodes = list(G_target.nodes())
+    target_coords = []
+    
+    for node in target_nodes:
+        data = G_target.nodes[node]
+        if isinstance(node, (tuple, list)) and len(node) >= 2 and isinstance(node[0], (int, float)):
+            lon, lat = node[0], node[1]
+        elif 'lon' in data and 'lat' in data:
+            lon, lat = float(data['lon']), float(data['lat'])
+        else:
+            lon, lat = 0.0, 0.0
+        target_coords.append([lon, lat])
+        
+    tree = KDTree(target_coords)
+    
+    for node in G_target.nodes():
+        G_target.nodes[node]['stanox'] = None
+        
+    tagged_count = 0
+    for stat in stations_ref:
+        ref_coord = [stat['lon'], stat['lat']]
+        dist, idx = tree.query(ref_coord)
+        
+        if dist <= max_distance_degrees:
+            target_node = target_nodes[idx]
+            G_target.nodes[target_node]['stanox'] = stat['stanox']
+            tagged_count += 1
+            
+    return tagged_count
