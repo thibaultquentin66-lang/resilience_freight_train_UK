@@ -561,6 +561,16 @@ def generate_disrupted_graph(input_graph, mode="flow"):
 
     return disrupted_graph
 
+#Generate a copy of a graph with a disruption applied
+def create_disrupted_graph(G, edges_to_remove):
+    G_disrupted = G.copy()
+    
+    for u, v in edges_to_remove:
+        if G_disrupted.has_edge(u, v):
+            G_disrupted.remove_edge(u, v)
+            
+    return G_disrupted
+
 #Tag nodes and associate STANOX code
 def tag_graph_with_kdtree(G_target, stations_ref, max_distance_degrees=0.002):
     target_nodes = list(G_target.nodes())
@@ -592,3 +602,76 @@ def tag_graph_with_kdtree(G_target, stations_ref, max_distance_degrees=0.002):
             tagged_count += 1
             
     return tagged_count
+
+#Create a disrupted graph by removing specific edges based on their index
+def create_bridge_strike_disruption_by_index(G_base, edge_list, indices):
+    """
+    Creates a disrupted graph by removing specific edges based on their rank (index)
+    in the provided edge_list.
+    
+    indices: can be a single integer (e.g., 2 for the 3rd worst)
+             or a list of integers (e.g., [0, 2, 9] for the 1st, 3rd, and 10th worst).
+    """
+    G_disrupted = G_base.copy()
+    is_multigraph = G_disrupted.is_multigraph()
+    
+    # If a single integer is passed, convert it to a list for the loop
+    if isinstance(indices, int):
+        indices = [indices]
+        
+    edges_to_remove = []
+    
+    for idx in indices:
+        try:
+            # Retrieve the specific edge directly from the Python list
+            edge_data = edge_list[idx]
+            
+            # edge_data could be (u, v) or (u, v, key)
+            if len(edge_data) == 3 and is_multigraph:
+                u, v, key = edge_data
+                edges_to_remove.append((u, v, key))
+            elif len(edge_data) == 2:
+                u, v = edge_data
+                # If the graph is a MultiGraph but data only has (u, v), 
+                # NetworkX will remove all parallel edges between u and v
+                if is_multigraph:
+                    for key in G_disrupted[u][v]:
+                        edges_to_remove.append((u, v, key))
+                else:
+                    edges_to_remove.append((u, v))
+                    
+            print(f"📍 Selected rank {idx + 1} from ranking (List Index: {idx})")
+        except IndexError:
+            print(f"⚠️ Index {idx} is out of bounds for this edge list.")
+            continue
+            
+    # Remove selected edges from the graph
+    G_disrupted.remove_edges_from(edges_to_remove)
+    print(f"💥 Bridge Strikes Scenario: {len(edges_to_remove)} specific edge(s) removed.")
+    
+    return G_disrupted
+
+#Remove edges with loading gauge less than 10
+def apply_gauge_10_restriction(G_disrupted):
+    """
+    Takes a disrupted graph and removes all tracks where the loading_gauge is less than 10.
+    """
+    G_gauge_10 = G_disrupted.copy()
+    edges_to_remove_gauge = []
+    is_multigraph = G_gauge_10.is_multigraph()
+
+    if is_multigraph:
+        for u, v, key, edge_data in G_gauge_10.edges(keys=True, data=True):
+            gauge_voie = edge_data.get('loading_gauge', None)
+            # FIX: Using the correct variable name 'gauge_voie' here
+            if gauge_voie is None or float(gauge_voie) < 10.0:
+                edges_to_remove_gauge.append((u, v, key))
+    else:
+        for u, v, edge_data in G_gauge_10.edges(data=True):
+            gauge_voie = edge_data.get('loading_gauge', None)
+            if gauge_voie is None or float(gauge_voie) < 10.0:
+                edges_to_remove_gauge.append((u, v))
+
+    G_gauge_10.remove_edges_from(edges_to_remove_gauge)
+    print(f"🚊 Gauge 10 Scenario: Removed tracks with gauge < 10.0.")
+    return G_gauge_10
