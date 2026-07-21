@@ -311,92 +311,6 @@ def closest_node(graphe, coord_cible):
         key=lambda n: (extract_coord(n)[0] - coord_cible[0])**2 + (extract_coord(n)[1] - coord_cible[1])**2
     )
 
-#Enumerate all usable paths between 2 nodes
-def count_feasible_route(graph, source, target, max_extra_stops=25, max_routes=10):
-    if not nx.has_path(graph, source, target):
-        return 0
-    try:
-        main_path = nx.shortest_path(graph, source, target, weight='distance_miles')
-        main_stops = len(main_path) - 1
-        max_allowed_stops = main_stops + max_extra_stops
-        
-        G_temp = graph.copy()
-        feasible_count = 0
-        
-        while feasible_count < max_routes:
-            if not nx.has_path(G_temp, source, target):
-                break
-            current_path = nx.shortest_path(G_temp, source, target, weight='distance_miles')
-            current_stops = len(current_path) - 1
-            if current_stops > max_allowed_stops:
-                break
-            if feasible_count > 0 or current_path != main_path:
-                feasible_count += 1
-            
-            if len(current_path) > 2:
-                mid = len(current_path) // 2
-                u, v = current_path[mid], current_path[mid+1]
-                if G_temp.has_edge(u, v):
-                    G_temp.remove_edges_from(list(G_temp.edges(u, v)))
-            else:
-                u, v = current_path[0], current_path[1]
-                G_temp.remove_edges_from(list(G_temp.edges(u, v)))
-        return feasible_count
-    except Exception:
-        return 0
-
-#Enumerate all usable paths between 2 nodes with loading gauge constraints
-def count_compatible_route(graph, source, target, max_extra_stops=25, max_routes=10):
-    if not nx.has_path(graph, source, target):
-        return 0
-    try:
-        main_path = nx.shortest_path(graph, source, target, weight='distance_miles')
-        main_stops = len(main_path) - 1
-        
-        gauges_on_path = []
-        for u, v in zip(main_path[:-1], main_path[1:]):
-            edge_data = graph[u][v]
-            if isinstance(edge_data, dict) and 0 in edge_data: 
-                edge_data = edge_data[0]
-            g = edge_data.get('loading_gauge', 0)
-            if g > 0:
-                gauges_on_path.append(g)
-        
-        required_gauge = min(gauges_on_path) if gauges_on_path else 6.0
-        
-        compatible_edges = []
-        for u, v, d in graph.edges(data=True):
-            edge_gauge = d.get('loading_gauge', 0)
-            if edge_gauge == 0 or edge_gauge >= required_gauge:
-                compatible_edges.append((u, v, d))
-                
-        G_compatible = nx.Graph()
-        G_compatible.add_nodes_from(graph.nodes(data=True))
-        G_compatible.add_edges_from(compatible_edges)
-        
-        feasible_count = 0
-        max_allowed_stops = main_stops + max_extra_stops
-        
-        while feasible_count < max_routes:
-            if not nx.has_path(G_compatible, source, target):
-                break
-            current_path = nx.shortest_path(G_compatible, source, target, weight='distance_miles')
-            current_stops = len(current_path) - 1
-            if current_stops > max_allowed_stops:
-                break
-            if feasible_count > 0 or current_path != main_path:
-                feasible_count += 1
-                
-            if len(current_path) > 2:
-                mid = len(current_path) // 2
-                u_cut, v_cut = current_path[mid], current_path[mid+1]
-                G_compatible.remove_edges_from(list(G_compatible.edges(u_cut, v_cut)))
-            else:
-                u_cut, v_cut = current_path[0], current_path[1]
-                G_compatible.remove_edges_from(list(G_compatible.edges(u_cut, v_cut)))
-        return feasible_count
-    except Exception:
-        return 0
 
 #Compute travel distance and time variations between baseline and alternative routes with loading gauge constraints
 def calculate_travel_cost(graph, source, target, max_extra_stops=25):
@@ -603,53 +517,6 @@ def tag_graph_with_kdtree(G_target, stations_ref, max_distance_degrees=0.002):
             
     return tagged_count
 
-#Create a disrupted graph by removing specific edges based on their index
-def create_bridge_strike_disruption_by_index(G_base, edge_list, indices):
-    """
-    Creates a disrupted graph by removing specific edges based on their rank (index)
-    in the provided edge_list.
-    
-    indices: can be a single integer (e.g., 2 for the 3rd worst)
-             or a list of integers (e.g., [0, 2, 9] for the 1st, 3rd, and 10th worst).
-    """
-    G_disrupted = G_base.copy()
-    is_multigraph = G_disrupted.is_multigraph()
-    
-    # If a single integer is passed, convert it to a list for the loop
-    if isinstance(indices, int):
-        indices = [indices]
-        
-    edges_to_remove = []
-    
-    for idx in indices:
-        try:
-            # Retrieve the specific edge directly from the Python list
-            edge_data = edge_list[idx]
-            
-            # edge_data could be (u, v) or (u, v, key)
-            if len(edge_data) == 3 and is_multigraph:
-                u, v, key = edge_data
-                edges_to_remove.append((u, v, key))
-            elif len(edge_data) == 2:
-                u, v = edge_data
-                # If the graph is a MultiGraph but data only has (u, v), 
-                # NetworkX will remove all parallel edges between u and v
-                if is_multigraph:
-                    for key in G_disrupted[u][v]:
-                        edges_to_remove.append((u, v, key))
-                else:
-                    edges_to_remove.append((u, v))
-                    
-            print(f"📍 Selected rank {idx + 1} from ranking (List Index: {idx})")
-        except IndexError:
-            print(f"⚠️ Index {idx} is out of bounds for this edge list.")
-            continue
-            
-    # Remove selected edges from the graph
-    G_disrupted.remove_edges_from(edges_to_remove)
-    print(f"💥 Bridge Strikes Scenario: {len(edges_to_remove)} specific edge(s) removed.")
-    
-    return G_disrupted
 
 #Remove edges with loading gauge less than 10
 def apply_gauge_10_restriction(G_disrupted):
@@ -675,3 +542,177 @@ def apply_gauge_10_restriction(G_disrupted):
     G_gauge_10.remove_edges_from(edges_to_remove_gauge)
     print(f"🚊 Gauge 10 Scenario: Removed tracks with gauge < 10.0.")
     return G_gauge_10
+
+#Remove edges from a graph based on the bridge strikes results
+def remove_bridge_edges(G, indices, disrupted_edges):
+    
+
+    G_disrupted = G.copy()
+
+
+    for idx in indices:
+
+
+        if idx >= len(disrupted_edges):
+            continue
+
+
+        edge = disrupted_edges[idx]
+
+
+        try:
+
+
+            if G_disrupted.is_multigraph() and len(edge) >= 3:
+
+
+                G_disrupted.remove_edge(
+                    edge[0],
+                    edge[1],
+                    key=edge[2]
+                )
+
+
+            else:
+
+
+                G_disrupted.remove_edge(
+                    edge[0],
+                    edge[1]
+                )
+
+
+        except (
+            nx.NetworkXError,
+            KeyError
+        ):
+
+            pass
+
+
+    return G_disrupted
+
+#Say if a node can be considerate coastal with arbitrary values
+def is_coastal_node(node):
+    
+    if not (isinstance(node, tuple) and len(node)==2):
+        return False
+
+    lon, lat = node
+
+    if abs(lon)<0.001 and abs(lat)<0.001:
+        return False
+
+    return (
+        lon > 1.0
+        or lon < -3.0
+        or lat < 51.0
+        or lat > 55.0
+    )
+
+    is_far_east = lon > 1.3
+    is_far_west = lon < -3.2
+    is_far_south = lat < 50.9
+    is_far_north = lat > 55.8
+    
+    return (is_far_east or is_far_west or is_far_south or is_far_north)
+
+#Remove edges based and execute the flow scenario
+def run_flow_disruption(scenario_name, edges_to_remove, G_final, G_gauge_6_initial, G_gauge_10_initial, trajets_trust_uniques):
+    
+    G_6_disc = G_final.copy()
+
+    for edge in edges_to_remove:
+        try:
+            G_6_disc.remove_edge(edge[0], edge[1])
+        except:
+            pass
+
+    G_10_disc = G_gauge_10_initial.copy()
+
+    for edge in edges_to_remove:
+        try:
+            G_10_disc.remove_edge(edge[0], edge[1])
+        except:
+            pass
+
+    metrics = {
+        "Gauge 6": {
+            "ok": 0,
+            "reroutes": 0,
+            "blocked": 0,
+            "dist": 0,
+            "time": 0
+        },
+        "Gauge 10": {
+            "ok": 0,
+            "reroutes": 0,
+            "blocked": 0,
+            "dist": 0,
+            "time": 0
+        }
+    }
+
+    for travel_id, (origin, destination) in trajets_trust_uniques.items():
+
+        #Loading gauge 6
+        try:
+            d0_6 = nx.shortest_path_length(G_gauge_6_initial, origin, destination, weight="distance")
+            t0_6 = nx.shortest_path_length(G_gauge_6_initial, origin, destination, weight="temps_minutes")
+        except:
+            continue
+
+        try:
+            d = nx.shortest_path_length(G_6_disc, origin, destination, weight="distance")
+            t = nx.shortest_path_length(G_6_disc, origin, destination, weight="temps_minutes")
+            if d - d0_6 <= 0.001:
+                metrics["Gauge 6"]["ok"] += 1
+            else:
+                metrics["Gauge 6"]["reroutes"] += 1
+                metrics["Gauge 6"]["dist"] += (d - d0_6)
+                metrics["Gauge 6"]["time"] += (t - t0_6)
+        except:
+            metrics["Gauge 6"]["blocked"] += 1
+
+        #Loading gauge 10
+        try:
+            d0_10 = nx.shortest_path_length(G_gauge_10_initial, origin, destination, weight="distance")
+            t0_10 = nx.shortest_path_length(G_gauge_10_initial, origin, destination, weight="temps_minutes")
+        except:
+            continue
+
+        try:
+            d = nx.shortest_path_length(G_10_disc, origin, destination, weight="distance")
+            t = nx.shortest_path_length(G_10_disc, origin, destination, weight="temps_minutes")
+            if d - d0_10 <= 0.001:
+                metrics["Gauge 10"]["ok"] += 1
+            else:
+                metrics["Gauge 10"]["reroutes"] += 1
+                metrics["Gauge 10"]["dist"] += (d - d0_10)
+                metrics["Gauge 10"]["time"] += (t - t0_10)
+        except:
+            metrics["Gauge 10"]["blocked"] += 1
+
+    #Save
+    rows = []
+
+    for gauge in ["Gauge 6", "Gauge 10"]:
+        total = (
+            metrics[gauge]["ok"]
+            + metrics[gauge]["reroutes"]
+            + metrics[gauge]["blocked"]
+        )
+
+        reroute_number = max(1, metrics[gauge]["reroutes"])
+
+        rows.append({
+            "Scenario": scenario_name,
+            "Gauge": gauge,
+            "Intact Trips": f'{metrics[gauge]["ok"]} ({metrics[gauge]["ok"]/total*100:.1f}%)',
+            "Rerouted Trips": f'{metrics[gauge]["reroutes"]} ({metrics[gauge]["reroutes"]/total*100:.1f}%)',
+            "Blocked Trips": f'{metrics[gauge]["blocked"]} ({metrics[gauge]["blocked"]/total*100:.1f}%)',
+            "Avg Detour (mi)": f'{metrics[gauge]["dist"]/reroute_number:.2f}',
+            "Avg Delay (min)": f'{metrics[gauge]["time"]/reroute_number:.1f}'
+        })
+
+    return rows
