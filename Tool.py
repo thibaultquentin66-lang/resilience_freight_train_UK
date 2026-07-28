@@ -168,8 +168,7 @@ def is_important_component(
         G, component, stations, main_coords, main_tree,
         min_line_length=2.0,
         max_small_size=0.3,
-        near_main_threshold=0.1,
-        reconnect_threshold=0.05
+        near_main_threshold=0.1
     ):
     
     #Extract coordinates
@@ -197,10 +196,6 @@ def is_important_component(
     #Little and far component = we don't keep it
     if max_dim <= max_small_size and dist_to_main > near_main_threshold:
         return False
-
-    #If small but really near to the main component = we keep it
-    if dist_to_main <= reconnect_threshold:
-        return True
 
     return False
 
