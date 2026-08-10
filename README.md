@@ -35,9 +35,8 @@ resilience_freight_train_UK/
 ├── data/
 │   ├── [dataset files]
 │
-├── notebooks/
-│   ├── Final_Work_V2.ipynb
-│   └── [Other notebooks are old versions]
+├── Final_Work_V2.ipynb
+└── [Other notebooks are old versions]
 │
 ├── results/
 │   └── [Table results from the disruptions scenarios]  
@@ -109,7 +108,7 @@ python Tool.py
 Jupyter notebooks can be launched using:
 
 ```bash
-jupyter notebook
+jupyter Final_Work_V2.ipynb
 ```
 ---
 
