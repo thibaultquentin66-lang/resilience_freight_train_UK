@@ -7,6 +7,9 @@ import random
 import networkx as nx
 import ast
 from scipy.spatial import KDTree
+import matplotlib.pyplot as plt
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import Normalize
 
 #Clean speed column
 def clean_speed(df):
@@ -1082,7 +1085,7 @@ def clean_tuple(x):
     )
 
 #Plot map with indicators
-def plot_bridge_impacts(gauge):
+def plot_bridge_impacts(gauge, bridges_gdf, network_gdf):
     
     d = bridges_gdf[
         bridges_gdf["Gauge"] == gauge
@@ -1282,7 +1285,7 @@ def extract_first_edge(x):
     return None, None
 
 #Get the flow from the graph for a given edge
-def get_flow(u, v):
+def get_flow(u, v, G_work):
     try:
         return G_work[u][v].get(
             "traffic_flow",
