@@ -711,3 +711,588 @@ def run_flow_disruption(scenario_name, edges_to_remove, G_final, G_gauge_6_initi
         })
 
     return rows
+
+#Return the results of 1 simulation of bridge strike disruption
+def run_single_bridge(args, G_gauge_6_initial, G_gauge_10_initial, bridge_baseline):
+    
+
+    rank,row=args
+
+
+    u=row["closest_edge_u"]
+    v=row["closest_edge_v"]
+
+    frequency=row["strike_frequency"]
+
+
+    G6 = G_gauge_6_initial.copy()
+    G10 = G_gauge_10_initial.copy()
+
+
+
+    if G6.has_edge(u,v):
+
+        G6.remove_edge(u,v)
+
+
+    if G10.has_edge(u,v):
+
+        G10.remove_edge(u,v)
+
+
+
+    results=[]
+
+
+    for gauge,graph in [
+        ("GAUGE 6",G6),
+        ("GAUGE 10",G10)
+    ]:
+
+
+        intact=0
+        rerouted=0
+        blocked=0
+
+        total_distance=0
+        total_time=0
+
+
+        total=len(
+            bridge_baseline[gauge]
+        )
+
+
+        for trip_id,(origin,destination,d0,t0) in bridge_baseline[gauge].items():
+
+
+            try:
+
+
+                d1 = nx.shortest_path_length(
+                    graph,
+                    origin,
+                    destination,
+                    weight="distance"
+                )
+
+
+                t1 = nx.shortest_path_length(
+                    graph,
+                    origin,
+                    destination,
+                    weight="temps_minutes"
+                )
+
+
+                distance_detour=d1-d0
+                time_detour=t1-t0
+
+
+                #Small differences ignored
+
+                if distance_detour <= 0.1 and time_detour <= 1:
+
+                    intact +=1
+
+
+                else:
+
+                    rerouted +=1
+
+                    total_distance += max(
+                        0,
+                        distance_detour
+                    )
+
+                    total_time += max(
+                        0,
+                        time_detour
+                    )
+
+
+            except nx.NetworkXNoPath:
+
+                blocked +=1
+
+
+
+        results.append({
+
+            "Bridge Rank":rank,
+
+            "edge_u":u,
+            "edge_v":v,
+
+            "u_lon":u[0],
+            "u_lat":u[1],
+
+            "v_lon":v[0],
+            "v_lat":v[1],
+
+            "strike_frequency":frequency,
+
+            "Gauge":gauge,
+
+            "Total trips":total,
+
+            "Intact trips":intact,
+
+            "Rerouted trips":rerouted,
+
+            "Blocked trips":blocked,
+
+
+            "Reroute rate":
+            rerouted/total,
+
+
+            "Blocked rate":
+            blocked/total,
+
+
+            "Avg detour (mi)":
+            total_distance/rerouted
+            if rerouted else 0,
+
+
+            "Avg delay (min)":
+            total_time/rerouted
+            if rerouted else 0
+
+        })
+
+
+    return results
+
+#Group adjacent edges having the exact same flow
+def build_flow_sections(edge_traffic, target_sections):
+
+    unused_edges = set(edge_traffic.keys())
+
+    sorted_edges = sorted(
+        unused_edges,
+        key=lambda e: edge_traffic[e],
+        reverse=True
+    )
+
+
+    sections = []
+
+
+    for starting_edge in sorted_edges:
+
+
+        if starting_edge not in unused_edges:
+            continue
+
+
+        flow = edge_traffic[starting_edge]
+
+
+        section = [starting_edge]
+
+
+        unused_edges.remove(starting_edge)
+
+
+        expanded = True
+
+
+        while expanded:
+
+            expanded = False
+            current_edges = list(section)
+            for current_edge in current_edges:
+                shared_nodes = set(current_edge)
+
+                for candidate in list(unused_edges):
+                    candidate_flow = edge_traffic[candidate]
+
+                    if candidate_flow != flow:
+                        continue
+
+                    if shared_nodes.intersection(candidate):
+                        section.append(candidate)
+                        unused_edges.remove(candidate)
+                        expanded = True
+
+        sections.append((section, flow))
+
+        if len(sections) >= target_sections:
+            break
+
+    return sections
+
+#Return the results of 1 simulation of high-flow disruption
+def run_single_flow_scenario(args, G_gauge_6_initial, G_gauge_10_initial, baseline_results):
+    
+    rank, section_edges, flow = args
+    G6 = G_gauge_6_initial.copy()
+    G10 = G_gauge_10_initial.copy()
+
+    for u, v in section_edges:
+
+
+        if G6.has_edge(u, v):
+            G6.remove_edge(u, v)
+
+        if G10.has_edge(u, v):
+            G10.remove_edge(u, v)
+
+    metrics={
+        "Gauge 6":{
+
+            "intact":0,
+            "rerouted":0,
+            "blocked":0,
+            "distance":0,
+            "time":0
+        },
+
+        "Gauge 10":{
+
+            "intact":0,
+            "rerouted":0,
+            "blocked":0,
+            "distance":0,
+            "time":0
+        }
+
+    }
+
+    for gauge, graph in [
+        ("Gauge 6", G6),
+        ("Gauge 10", G10)
+    ]:
+
+        for trip_id, (origin, destination, d0, t0) in baseline_results[gauge].items():
+            try:
+                d1 = nx.shortest_path_length(
+                    graph,
+                    source=origin,
+                    target=destination,
+                    weight="distance"
+                )
+
+
+
+                t1 = nx.shortest_path_length(
+                    graph,
+                    source=origin,
+                    target=destination,
+                    weight="temps_minutes"
+                )
+
+                distance_detour = d1 - d0
+                time_detour = t1 - t0
+
+                if distance_detour < 0.1 and time_detour < 1:
+                    metrics[gauge]["intact"] += 1
+
+                else:
+                    metrics[gauge]["rerouted"] += 1
+                    metrics[gauge]["distance"] += max(
+                        0,
+                        distance_detour
+                    )
+
+                    metrics[gauge]["time"] += max(
+                        0,
+                        time_detour
+                    )
+
+
+
+            except nx.NetworkXNoPath:
+                metrics[gauge]["blocked"] += 1
+
+    results=[]
+
+    for gauge in ["Gauge 6", "Gauge 10"]:
+
+
+        total = len(
+            baseline_results[gauge]
+        )
+
+
+        rerouted = metrics[gauge]["rerouted"]
+
+
+
+        results.append({
+            "Section rank": rank,
+
+            "Number of disrupted edges": len(section_edges),
+
+            "Disrupted edges": str(section_edges),
+
+            "Flow trains": flow,
+
+            "Gauge": gauge,
+
+            "Trips analysed": total,
+
+            "Intact Trips":
+            f"{metrics[gauge]['intact']} "
+            f"({metrics[gauge]['intact']/total*100:.1f}%)"
+
+            if total > 0 else "0",
+
+            "Rerouted Trips":
+            f"{rerouted} "
+            f"({rerouted/total*100:.1f}%)"
+
+            if total > 0 else "0",
+
+            "Blocked Trips":
+            f"{metrics[gauge]['blocked']} "
+            f"({metrics[gauge]['blocked']/total*100:.1f}%)"
+
+            if total > 0 else "0",
+
+            "Avg Detour (mi)":
+            f"{metrics[gauge]['distance']/rerouted:.2f}"
+
+            if rerouted > 0 else "0",
+
+            "Avg Delay (min)":
+            f"{metrics[gauge]['time']/rerouted:.1f}"
+            if rerouted > 0 else "0"
+        })
+
+    return results
+
+#Clean a tuple that is stored as a string in the results
+def clean_tuple(x):
+    
+    x = str(x)
+
+    x = (
+        x.replace("np.float64(", "")
+         .replace(")", "")
+    )
+
+    values = x.strip("()").split(",")
+
+    return (
+        float(values[0]),
+        float(values[1])
+    )
+
+#Plot map with indicators
+def plot_bridge_impacts(gauge):
+    
+    d = bridges_gdf[
+        bridges_gdf["Gauge"] == gauge
+    ].copy()
+
+    #Indicators
+
+    indicators = [
+        ("Rerouted trips number",
+         "Rerouted freight trips",
+         "Rerouted trips"),
+
+        ("Blocked trips number",
+         "Blocked freight trips",
+         "Blocked trips"),
+
+        ("Avg detour (mi)",
+         "Average detour",
+         "Average detour (miles)"),
+
+        ("Avg delay (min)",
+         "Average delay",
+         "Average delay (minutes)")
+    ]
+
+    #Figure
+
+    fig, axes = plt.subplots(
+        2, 2,
+        figsize=(16, 16),
+        dpi=300
+    )
+
+    axes = axes.flatten()
+
+    #Plot each indicator
+
+    for ax, (column, title, cbar_label) in zip(
+        axes,
+        indicators
+    ):
+
+        values = d[column].fillna(0)
+
+        #Normalization
+
+        norm = Normalize(
+            vmin=values.min(),
+            vmax=values.max()
+        )
+
+        cmap = plt.cm.plasma
+
+        #Point size
+
+        if values.max() > 0:
+            sizes = (
+                15
+                + 90 * np.sqrt(
+                    values / values.max()
+                )
+            )
+        else:
+            sizes = np.full(
+                len(values),
+                15
+            )
+
+        #Network background
+
+        network_gdf.plot(
+            ax=ax,
+            color="0.45",
+            linewidth=0.45,
+            alpha=0.75,
+            zorder=1
+        )
+
+        #Bridge disruptions
+
+        d.plot(
+            ax=ax,
+            column=column,
+            cmap=cmap,
+            markersize=sizes,
+            alpha=0.9,
+            edgecolor="black",
+            linewidth=0.25,
+            zorder=2
+        )
+
+        #Colorbar
+
+        sm = ScalarMappable(
+            norm=norm,
+            cmap=cmap
+        )
+
+        sm.set_array([])
+
+        cbar = fig.colorbar(
+            sm,
+            ax=ax,
+            fraction=0.035,
+            pad=0.02
+        )
+
+        cbar.set_label(
+            cbar_label,
+            fontsize=10
+        )
+
+        #Formatting
+
+        ax.set_title(
+            title,
+            fontsize=13,
+            fontweight="bold",
+            pad=8
+        )
+
+        ax.set_xlabel(
+            "Longitude",
+            fontsize=9
+        )
+
+        ax.set_ylabel(
+            "Latitude",
+            fontsize=9
+        )
+
+        ax.set_aspect(
+            "equal",
+            adjustable="box"
+        )
+
+        ax.grid(False)
+
+        #Remove unnecessary borders
+
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+    #Global title
+
+    fig.suptitle(
+        f"Spatial distribution of bridge strike impacts – {gauge}",
+        fontsize=18,
+        fontweight="bold",
+        y=0.96
+    )
+
+    fig.text(
+        0.5,
+        0.925,
+        "Point size and colour represent the magnitude of each indicator",
+        ha="center",
+        fontsize=11
+    )
+
+    plt.tight_layout(
+        rect=[0, 0, 1, 0.91]
+    )
+
+    plt.show()
+
+#Extract coordinate pairs from the disrupted edges column
+def extract_coordinates(text):
+    coords = re.findall(
+        r"\((-?\d+\.\d+),\s*(-?\d+\.\d+)\)",
+        str(text)
+    )
+
+    return [
+        (
+            float(x),
+            float(y)
+        )
+        for x, y in coords
+    ]
+
+#Extract the first edge from a string representation of coordinates
+def extract_first_edge(x):
+
+    coords = re.findall(
+        r"\((-?\d+\.\d+),\s*(-?\d+\.\d+)\)",
+        str(x)
+    )
+
+    if len(coords) >= 2:
+
+        return (
+            (float(coords[0][0]), float(coords[0][1])),
+            (float(coords[1][0]), float(coords[1][1]))
+        )
+
+    return None, None
+
+#Get the flow from the graph for a given edge
+def get_flow(u, v):
+    try:
+        return G_work[u][v].get(
+            "traffic_flow",
+            0
+        )
+    except:
+        try:
+            return G_work[v][u].get(
+                "traffic_flow",
+                0
+            )
+        except:
+            return 0
