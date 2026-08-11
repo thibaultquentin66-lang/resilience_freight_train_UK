@@ -10,6 +10,9 @@ from scipy.spatial import KDTree
 import matplotlib.pyplot as plt
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import Normalize
+import matplotlib.cm as cm
+from shapely.ops import unary_union
+from shapely.geometry import LineString
 
 #Clean speed column
 def clean_speed(df):
@@ -1299,3 +1302,128 @@ def get_flow(u, v, G_work):
             )
         except:
             return 0
+
+#Plot the flow disruption impacts on a map for a given gauge
+def plot_flow_impacts(gauge, gdf_results, gdf_network):
+    
+    d = gdf_results[
+        gdf_results["Gauge"] == gauge
+    ].copy()
+
+    if d.empty:
+        print(f"No results found for {gauge}")
+        return
+
+
+    indicators = [
+        (
+            "Rerouted Trips number",
+            "Rerouted freight trips",
+            "Rerouted trips"
+        ),
+        (
+            "Blocked Trips number",
+            "Blocked freight trips",
+            "Blocked trips"
+        ),
+        (
+            "Avg Detour numeric",
+            "Average detour (miles)",
+            "Average detour (mi)"
+        ),
+        (
+            "Avg Delay numeric",
+            "Average delay (minutes)",
+            "Average delay (min)"
+        )
+    ]
+
+    fig, axes = plt.subplots(2, 2, figsize=(18, 14))
+    axes = axes.flatten()
+
+    for ax, (column, title, cbar_label) in zip(axes, indicators):
+
+        values = pd.to_numeric(
+            d[column],
+            errors="coerce"
+        ).fillna(0)
+
+        vmin = values.min()
+        vmax = values.max()
+
+        if vmax == vmin:
+            vmax = vmin + 1
+
+        norm = Normalize(vmin=vmin, vmax=vmax)
+
+        cmap = cm.get_cmap("viridis")
+
+        gdf_network.plot(
+            ax=ax,
+            linewidth=0.35,
+            color="0.65",
+            alpha=0.75
+        )
+
+        gdf_plot = d.copy()
+        gdf_plot["_value"] = values
+
+        gdf_plot.plot(
+            ax=ax,
+            column="_value",
+            cmap=cmap,
+            linewidth=2.5,
+            alpha=0.95,
+            legend=False
+        )
+
+
+        sm = cm.ScalarMappable(norm=norm, cmap=cmap)
+        sm.set_array([])
+        cbar = fig.colorbar(sm, ax=ax, fraction=0.035, pad=0.02)
+        cbar.set_label(cbar_label, fontsize=11)
+
+        ax.set_title(title, fontsize=14, fontweight="bold", pad=10)
+        ax.set_axis_off()
+
+    fig.suptitle(f"Spatial distribution of high-flow disruption impacts — {gauge}", fontsize=19, fontweight="bold", y=0.98)
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+    plt.show()
+
+#Convert a string representation of disrupted edges into a list of edge tuples
+def parse_edges(edge_string):
+    try:
+        return ast.literal_eval(edge_string)
+    except Exception:
+        return []
+
+#Convert a string representation of disrupted edges into a unified geometry
+def edges_to_geometry(edge_string):
+    
+    edges = parse_edges(edge_string)
+
+    geometries = []
+
+    for edge in edges:
+
+        try:
+            u, v = edge
+
+            lon1, lat1 = u
+            lon2, lat2 = v
+
+            geometries.append(
+                LineString([
+                    (lon1, lat1),
+                    (lon2, lat2)
+                ])
+            )
+
+        except Exception:
+            continue
+
+    if len(geometries) == 0:
+        return None
+    
+    return unary_union(geometries)
