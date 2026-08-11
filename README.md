@@ -30,15 +30,15 @@ resilience_freight_train_UK/
 │
 ├── README.md
 │
+├── Final_Work_V2.ipynb
+│
 ├── Tool.py
 │
 ├── data/
 │   ├── [dataset files]
 │
-├── Final_Work_V2.ipynb
-│
-├──code/
-│   └── [Other notebooks are old versions]
+├──old code/
+│   └── [Old notebooks]
 │
 ├── results/
 │   └── [Table results from the disruptions scenarios]  
