@@ -227,10 +227,10 @@ These limitations will be considered when interpreting the results.
 
 ## Author
 
-**[Quentin THIBAULT]**
-**[Taku FUJIYAMA]**
+**Quentin THIBAULT**
+**Taku FUJIYAMA**
 
-**[University College London (UCL)]**
+**University College London (UCL)**
 
 **Year:** 2026
 
