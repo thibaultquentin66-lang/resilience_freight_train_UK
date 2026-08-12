@@ -238,8 +238,8 @@ These limitations will be considered when interpreting the results.
 
 ## Project Information
 
-**Project:** Resilience of UK Freight Rail Transport
-**Start date:** 30/03/2026
+**Project:** Resilience of UK Freight Rail Transport<br>
+**Start date:** 30/03/2026<br>
 **End date:** 19/08/2026
 
 ---
