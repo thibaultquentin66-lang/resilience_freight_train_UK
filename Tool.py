@@ -1098,19 +1098,19 @@ def plot_bridge_impacts(gauge, bridges_gdf, network_gdf):
 
     indicators = [
         ("Rerouted trips number",
-         "Rerouted freight trips",
+         "Rerouted trips able to use an alternative path to reach their destination",
          "Rerouted trips"),
 
         ("Blocked trips number",
-         "Blocked freight trips",
+         "Blocked trips not able to use an alternative path to reach their destination",
          "Blocked trips"),
 
         ("Avg detour (mi)",
-         "Average detour",
+         "Average detour (miles) caused by the disruption for rerouted trips",
          "Average detour (miles)"),
 
         ("Avg delay (min)",
-         "Average delay",
+         "Average delay (minutes) caused by the disruption for rerouted trips",
          "Average delay (minutes)")
     ]
 
@@ -1210,22 +1210,12 @@ def plot_bridge_impacts(gauge, bridges_gdf, network_gdf):
             pad=8
         )
 
-        ax.set_xlabel(
-            "Longitude",
-            fontsize=9
-        )
-
-        ax.set_ylabel(
-            "Latitude",
-            fontsize=9
-        )
-
         ax.set_aspect(
             "equal",
             adjustable="box"
         )
 
-        ax.grid(False)
+        ax.set_axis_off()
 
         #Remove unnecessary borders
 
@@ -1235,18 +1225,10 @@ def plot_bridge_impacts(gauge, bridges_gdf, network_gdf):
     #Global title
 
     fig.suptitle(
-        f"Spatial distribution of bridge strike impacts – {gauge}",
+        f"Distribution of bridge strike impacts – {gauge}",
         fontsize=18,
         fontweight="bold",
         y=0.96
-    )
-
-    fig.text(
-        0.5,
-        0.925,
-        "Point size and colour represent the magnitude of each indicator",
-        ha="center",
-        fontsize=11
     )
 
     plt.tight_layout(
@@ -1314,34 +1296,51 @@ def plot_flow_impacts(gauge, gdf_results, gdf_network):
         print(f"No results found for {gauge}")
         return
 
-
     indicators = [
         (
             "Rerouted Trips number",
-            "Rerouted freight trips",
+            "Rerouted trips able to use an alternative path to reach their destination",
             "Rerouted trips"
         ),
         (
             "Blocked Trips number",
-            "Blocked freight trips",
+            "Blocked trips not able to use an alternative path to reach their destination",
             "Blocked trips"
         ),
         (
             "Avg Detour numeric",
-            "Average detour (miles)",
+            "Average detour (miles) caused by the disruption for rerouted trips",
             "Average detour (mi)"
         ),
         (
             "Avg Delay numeric",
-            "Average delay (minutes)",
+            "Average delay (minutes) caused by the disruption for rerouted trips",
             "Average delay (min)"
         )
     ]
 
-    fig, axes = plt.subplots(2, 2, figsize=(18, 14))
+    fig, axes = plt.subplots(
+        2,
+        2,
+        figsize=(20, 14)
+    )
+
     axes = axes.flatten()
 
-    for ax, (column, title, cbar_label) in zip(axes, indicators):
+    xmin, ymin, xmax, ymax = d.total_bounds
+
+    margin_x = (xmax - xmin) * 0.10
+    margin_y = (ymax - ymin) * 0.10
+
+    xmin -= margin_x
+    xmax += margin_x
+    ymin -= margin_y
+    ymax += margin_y
+
+    for ax, (column, title, cbar_label) in zip(
+        axes,
+        indicators
+    ):
 
         values = pd.to_numeric(
             d[column],
@@ -1354,7 +1353,10 @@ def plot_flow_impacts(gauge, gdf_results, gdf_network):
         if vmax == vmin:
             vmax = vmin + 1
 
-        norm = Normalize(vmin=vmin, vmax=vmax)
+        norm = Normalize(
+            vmin=vmin,
+            vmax=vmax
+        )
 
         cmap = cm.get_cmap("viridis")
 
@@ -1377,17 +1379,54 @@ def plot_flow_impacts(gauge, gdf_results, gdf_network):
             legend=False
         )
 
+        ax.set_xlim(xmin, xmax)
+        ax.set_ylim(ymin, ymax)
 
-        sm = cm.ScalarMappable(norm=norm, cmap=cmap)
+        ax.set_aspect("equal")
+
+        sm = cm.ScalarMappable(
+            norm=norm,
+            cmap=cmap
+        )
         sm.set_array([])
-        cbar = fig.colorbar(sm, ax=ax, fraction=0.035, pad=0.02)
-        cbar.set_label(cbar_label, fontsize=11)
 
-        ax.set_title(title, fontsize=14, fontweight="bold", pad=10)
+        cbar = fig.colorbar(
+            sm,
+            ax=ax,
+            fraction=0.025,
+            pad=0.01,
+            shrink=0.80
+        )
+
+        cbar.set_label(
+            cbar_label,
+            fontsize=11
+        )
+
+        ax.set_title(
+            title,
+            fontsize=14,
+            fontweight="bold",
+            pad=6
+        )
+
         ax.set_axis_off()
 
-    fig.suptitle(f"Spatial distribution of high-flow disruption impacts — {gauge}", fontsize=19, fontweight="bold", y=0.98)
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.suptitle(
+        f"Spatial distribution of high-flow disruption impacts — {gauge}",
+        fontsize=19,
+        fontweight="bold",
+        y=0.97
+    )
+
+    plt.subplots_adjust(
+        left=0.02,
+        right=0.98,
+        bottom=0.03,
+        top=0.91,
+        wspace=0.01,
+        hspace=0.08
+    )
 
     plt.show()
 
