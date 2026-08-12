@@ -227,7 +227,7 @@ These limitations will be considered when interpreting the results.
 
 ## Author
 
-**Quentin THIBAULT**
+**Quentin THIBAULT**<br>
 **Taku FUJIYAMA**
 
 **University College London (UCL)**
