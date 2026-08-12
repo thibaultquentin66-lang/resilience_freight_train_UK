@@ -30,7 +30,7 @@ resilience_freight_train_UK/
 │
 ├── README.md
 │
-├── Final_Work_V2.ipynb
+├── Final_Work_V3.ipynb
 │
 ├── Tool.py
 │
@@ -51,7 +51,7 @@ resilience_freight_train_UK/
 **`Tool.py`**
 Contains the main Python functions developed for the project.
 
-**`Final_Work_V2.ipynb`**
+**`Final_Work_V3.ipynb`**
 Contains Jupyter notebooks used for the analysis.
 
 **`data/`**
@@ -110,7 +110,7 @@ python Tool.py
 Jupyter notebooks can be launched using:
 
 ```bash
-jupyter Final_Work_V2.ipynb
+jupyter Final_Work_V3.ipynb
 ```
 ---
 
@@ -225,12 +225,12 @@ These limitations will be considered when interpreting the results.
 
 ---
 
-## Author
+## Authors
 
-**[Quentin THIBAULT]**
-**[Taku FUJIYAMA]**
+**Quentin THIBAULT**<br>
+**Taku FUJIYAMA**
 
-**[University College London (UCL)]**
+**University College London (UCL)**
 
 **Year:** 2026
 
@@ -238,8 +238,8 @@ These limitations will be considered when interpreting the results.
 
 ## Project Information
 
-**Project:** Resilience of UK Freight Rail Transport
-**Start date:** [30/03/2026]
-**End date:** [19/08/2026]
+**Project:** Resilience of UK Freight Rail Transport<br>
+**Start date:** 30/03/2026<br>
+**End date:** 19/08/2026
 
 ---
