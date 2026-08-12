@@ -225,7 +225,7 @@ These limitations will be considered when interpreting the results.
 
 ---
 
-## Author
+## Authors
 
 **Quentin THIBAULT**<br>
 **Taku FUJIYAMA**
