@@ -1297,50 +1297,32 @@ def plot_flow_impacts(gauge, gdf_results, gdf_network):
         return
 
     indicators = [
-        (
-            "Rerouted Trips number",
-            "Rerouted trips able to use an alternative path to reach their destination",
-            "Rerouted trips"
-        ),
-        (
-            "Blocked Trips number",
-            "Blocked trips not able to use an alternative path to reach their destination",
-            "Blocked trips"
-        ),
-        (
-            "Avg Detour numeric",
-            "Average detour (miles) caused by the disruption for rerouted trips",
-            "Average detour (mi)"
-        ),
-        (
-            "Avg Delay numeric",
-            "Average delay (minutes) caused by the disruption for rerouted trips",
-            "Average delay (min)"
-        )
+        ("Rerouted Trips number",
+         "Rerouted trips able to use an alternative path to reach their destination",
+         "Rerouted trips"),
+
+        ("Blocked Trips number",
+         "Blocked trips not able to use an alternative path to reach their destination",
+         "Blocked trips"),
+
+        ("Avg Detour numeric",
+         "Average detour (miles) caused by the disruption for rerouted trips",
+         "Average detour (mi)"),
+
+        ("Avg Delay numeric",
+         "Average delay (minutes) caused by the disruption for rerouted trips",
+         "Average delay (min)")
     ]
 
     fig, axes = plt.subplots(
-        2,
-        2,
-        figsize=(20, 14)
+        2, 2,
+        figsize=(16, 16),
+        dpi=300
     )
 
     axes = axes.flatten()
 
-    xmin, ymin, xmax, ymax = d.total_bounds
-
-    margin_x = (xmax - xmin) * 0.10
-    margin_y = (ymax - ymin) * 0.10
-
-    xmin -= margin_x
-    xmax += margin_x
-    ymin -= margin_y
-    ymax += margin_y
-
-    for ax, (column, title, cbar_label) in zip(
-        axes,
-        indicators
-    ):
+    for ax, (column, title, cbar_label) in zip(axes, indicators):
 
         values = pd.to_numeric(
             d[column],
@@ -1358,13 +1340,14 @@ def plot_flow_impacts(gauge, gdf_results, gdf_network):
             vmax=vmax
         )
 
-        cmap = cm.get_cmap("viridis")
+        cmap = plt.cm.plasma
 
         gdf_network.plot(
             ax=ax,
-            linewidth=0.35,
-            color="0.65",
-            alpha=0.75
+            color="0.45",
+            linewidth=0.45,
+            alpha=0.75,
+            zorder=1
         )
 
         gdf_plot = d.copy()
@@ -1375,57 +1358,55 @@ def plot_flow_impacts(gauge, gdf_results, gdf_network):
             column="_value",
             cmap=cmap,
             linewidth=2.5,
-            alpha=0.95,
-            legend=False
+            alpha=0.9,
+            zorder=2
         )
 
-        ax.set_xlim(xmin, xmax)
-        ax.set_ylim(ymin, ymax)
-
-        ax.set_aspect("equal")
-
-        sm = cm.ScalarMappable(
+        sm = ScalarMappable(
             norm=norm,
             cmap=cmap
         )
+
         sm.set_array([])
 
         cbar = fig.colorbar(
             sm,
             ax=ax,
-            fraction=0.025,
-            pad=0.01,
-            shrink=0.80
+            fraction=0.035,
+            pad=0.02
         )
 
         cbar.set_label(
             cbar_label,
-            fontsize=11
+            fontsize=10
         )
 
         ax.set_title(
             title,
-            fontsize=14,
+            fontsize=13,
             fontweight="bold",
-            pad=6
+            pad=8
+        )
+
+        ax.set_aspect(
+            "equal",
+            adjustable="box"
         )
 
         ax.set_axis_off()
 
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
     fig.suptitle(
-        f"Spatial distribution of high-flow disruption impacts — {gauge}",
-        fontsize=19,
+        f"Spatial distribution of high-flow disruption impacts – {gauge}",
+        fontsize=18,
         fontweight="bold",
-        y=0.97
+        y=0.96
     )
 
-    plt.subplots_adjust(
-        left=0.02,
-        right=0.98,
-        bottom=0.03,
-        top=0.91,
-        wspace=0.01,
-        hspace=0.08
+    plt.tight_layout(
+        rect=[0, 0, 1, 0.91]
     )
 
     plt.show()
@@ -1439,7 +1420,7 @@ def parse_edges(edge_string):
 
 #Convert a string representation of disrupted edges into a unified geometry
 def edges_to_geometry(edge_string):
-    
+    from shapely.ops import unary_union
     edges = parse_edges(edge_string)
 
     geometries = []
