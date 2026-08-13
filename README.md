@@ -43,7 +43,9 @@ resilience_freight_train_UK/
 ├── results/
 │   └── [Table results from the disruptions scenarios]  
 │   
-└── requirements.txt
+├── requirements.txt
+│   
+└── environment.yml 
 ```
 
 ### Main files
