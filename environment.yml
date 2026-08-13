@@ -1,0 +1,16 @@
+name: resilience
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - networkx
+  - pandas
+  - matplotlib
+  - openpyxl
+  - ipykernel
+  - conda-forge::folium
+  - geopandas
+  - fiona
+  - conda-forge::osmnx
+  - conda-forge::contextily
+prefix: C:\Users\Administrateur\Documents\3A\Anaconda\envs\resilience

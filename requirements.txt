@@ -53,6 +53,7 @@ osmnx @ file:///home/conda/feedstock_root/build_artifacts/osmnx_1764169587954/wo
 packaging==26.0
 pandas @ file:///C:/miniconda3/conda-bld/pandas_1762332399653/work/dist/pandas-2.3.3-cp310-cp310-win_amd64.whl#sha256=25368e0adc93a7db0f3983502b4e57344f71af8f45ca3849f7c3833738f306aa
 parso @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_parso_1770676243/work
+patsy==1.0.2
 pickleshare @ file:///home/conda/feedstock_root/build_artifacts/pickleshare_1733327343728/work
 pillow @ file:///C:/Users/task_177247533938806/croot/pillow_1772475448619/work
 platformdirs @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_platformdirs_1775741140/work
@@ -80,6 +81,7 @@ shapely @ file:///C:/miniconda3/conda-bld/shapely_1764846910319/work
 sip @ file:///C:/Users/task_177080700866195/croot/sip_1770807604859/work
 six @ file:///C:/b/abs_149wuyuo1o/croot/six_1744271521515/work
 stack_data @ file:///home/conda/feedstock_root/build_artifacts/stack_data_1733569443808/work
+statsmodels==0.14.6
 threadpoolctl @ file:///C:/miniconda3/conda-bld/threadpoolctl_1764361785970/work
 tomli @ file:///C:/Users/task_176829653256119/croot/tomli_1768296653758/work
 tornado @ file:///C:/Users/task_177430356365515/croot/tornado_1774303657186/work
