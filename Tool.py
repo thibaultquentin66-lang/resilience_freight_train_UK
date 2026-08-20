@@ -13,6 +13,7 @@ from matplotlib.colors import Normalize
 import matplotlib.cm as cm
 from shapely.ops import unary_union
 from shapely.geometry import LineString
+from matplotlib.colors import LinearSegmentedColormap
 
 #Clean speed column
 def clean_speed(df):
@@ -1447,3 +1448,345 @@ def edges_to_geometry(edge_string):
         return None
     
     return unary_union(geometries)
+
+#Plot the flow disruption impacts on a map for a given gauge with 0 values removed
+def plot_flow_impacts_0(gauge, gdf_results, gdf_network):
+    
+    d = gdf_results[
+        gdf_results["Gauge"] == gauge
+    ].copy()
+
+    if d.empty:
+        print(f"No results found for {gauge}")
+        return
+
+    indicators = [
+        (
+            "Rerouted Trips number",
+            "Rerouted trips able to use an alternative path to reach their destination",
+            "Rerouted trips"
+        ),
+        (
+            "Blocked Trips number",
+            "Blocked trips not able to use an alternative path to reach their destination",
+            "Blocked trips"
+        ),
+        (
+            "Avg Detour numeric",
+            "Average detour (miles) caused by the disruption for rerouted trips",
+            "Average detour (mi)"
+        ),
+        (
+            "Avg Delay numeric",
+            "Average delay (minutes) caused by the disruption for rerouted trips",
+            "Average delay (min)"
+        )
+    ]
+
+    fig, axes = plt.subplots(
+        2,
+        2,
+        figsize=(16, 16),
+        dpi=300
+    )
+
+    axes = axes.flatten()
+
+    for ax, (column, title, cbar_label) in zip(axes, indicators):
+
+        values = pd.to_numeric(
+            d[column],
+            errors="coerce"
+        ).fillna(0)
+
+        gdf_plot = d.copy()
+        gdf_plot["_value"] = values
+
+        gdf_plot = gdf_plot[
+            gdf_plot["_value"] > 0
+        ].copy()
+
+        gdf_network.plot(
+            ax=ax,
+            color="0.45",
+            linewidth=0.45,
+            alpha=0.75,
+            zorder=1
+        )
+
+        if gdf_plot.empty:
+
+            ax.text(
+                0.5,
+                0.5,
+                "No positive values",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+                fontsize=12
+            )
+
+            ax.set_title(
+                title,
+                fontsize=13,
+                fontweight="bold",
+                pad=8
+            )
+
+            ax.set_aspect(
+                "equal",
+                adjustable="box"
+            )
+
+            ax.set_axis_off()
+
+            continue
+
+        vmin = gdf_plot["_value"].min()
+        vmax = gdf_plot["_value"].max()
+
+        if vmax == vmin:
+            vmax = vmin + 1
+
+        norm = Normalize(
+            vmin=vmin,
+            vmax=vmax
+        )
+
+        cmap = LinearSegmentedColormap.from_list(
+            "traffic_red",
+            [
+                "#F2D34F",
+                "#F0B23C",
+                "#E88A3A",
+                "#E05A3F",
+                "#D63F3F"
+            ]
+        )
+
+        gdf_plot.plot(
+            ax=ax,
+            column="_value",
+            cmap=cmap,
+            linewidth=2.5,
+            alpha=0.9,
+            zorder=2
+        )
+
+        sm = ScalarMappable(
+            norm=norm,
+            cmap=cmap
+        )
+
+        sm.set_array([])
+
+        cbar = fig.colorbar(
+            sm,
+            ax=ax,
+            fraction=0.035,
+            pad=0.02
+        )
+
+        cbar.set_label(
+            cbar_label,
+            fontsize=10
+        )
+
+        ax.set_title(
+            title,
+            fontsize=13,
+            fontweight="bold",
+            pad=8
+        )
+
+        ax.set_aspect(
+            "equal",
+            adjustable="box"
+        )
+
+        ax.set_axis_off()
+
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+    fig.suptitle(
+        f"Spatial distribution of high-flow disruption impacts – {gauge}",
+        fontsize=18,
+        fontweight="bold",
+        y=0.96
+    )
+
+    plt.tight_layout(
+        rect=[0, 0, 1, 0.91]
+    )
+
+    plt.show()
+
+#Plot map with indicators with 0 values removed
+def plot_bridge_impacts_0(gauge, bridges_gdf, network_gdf):
+    
+    d = bridges_gdf[
+        bridges_gdf["Gauge"] == gauge
+    ].copy()
+
+    #Indicators
+
+    indicators = [
+        ("Rerouted trips number",
+         "Rerouted trips able to use an alternative path to reach their destination",
+         "Rerouted trips"),
+
+        ("Blocked trips number",
+         "Blocked trips not able to use an alternative path to reach their destination",
+         "Blocked trips"),
+
+        ("Avg detour (mi)",
+         "Average detour (miles) caused by the disruption for rerouted trips",
+         "Average detour (miles)"),
+
+        ("Avg delay (min)",
+         "Average delay (minutes) caused by the disruption for rerouted trips",
+         "Average delay (minutes)")
+    ]
+
+    fig, axes = plt.subplots(
+        2, 2,
+        figsize=(16, 16),
+        dpi=300
+    )
+
+    axes = axes.flatten()
+
+    for ax, (column, title, cbar_label) in zip(
+        axes,
+        indicators
+    ):
+
+        values = pd.to_numeric(
+            d[column],
+            errors="coerce"
+        ).fillna(0)
+
+        d_plot = d.copy()
+        d_plot["_value"] = values
+
+        d_plot = d_plot[
+            d_plot["_value"] > 0
+        ].copy()
+
+        network_gdf.plot(
+            ax=ax,
+            color="0.45",
+            linewidth=0.45,
+            alpha=0.75,
+            zorder=1
+        )
+
+        if d_plot.empty:
+
+            ax.set_title(
+                title,
+                fontsize=13,
+                fontweight="bold",
+                pad=8
+            )
+
+            ax.set_aspect(
+                "equal",
+                adjustable="box"
+            )
+
+            ax.set_axis_off()
+
+            continue
+
+        values = d_plot["_value"]
+
+        norm = Normalize(
+            vmin=values.min(),
+            vmax=values.max()
+        )
+
+        cmap = LinearSegmentedColormap.from_list(
+            "traffic_red",
+            [
+                "#F2D34F",
+                "#F0B23C",
+                "#E88A3A",
+                "#E05A3F",
+                "#D63F3F"
+            ]
+        )
+
+        if values.max() > 0:
+            sizes = (
+                15
+                + 90 * np.sqrt(
+                    values / values.max()
+                )
+            )
+        else:
+            sizes = np.full(
+                len(values),
+                15
+            )
+
+        d_plot.plot(
+            ax=ax,
+            column="_value",
+            cmap=cmap,
+            markersize=sizes,
+            alpha=0.9,
+            edgecolor="black",
+            linewidth=0.25,
+            zorder=2
+        )
+
+        sm = ScalarMappable(
+            norm=norm,
+            cmap=cmap
+        )
+
+        sm.set_array([])
+
+        cbar = fig.colorbar(
+            sm,
+            ax=ax,
+            fraction=0.035,
+            pad=0.02
+        )
+
+        cbar.set_label(
+            cbar_label,
+            fontsize=10
+        )
+
+        ax.set_title(
+            title,
+            fontsize=13,
+            fontweight="bold",
+            pad=8
+        )
+
+        ax.set_aspect(
+            "equal",
+            adjustable="box"
+        )
+
+        ax.set_axis_off()
+
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+    fig.suptitle(
+        f"Distribution of bridge strike impacts – {gauge}",
+        fontsize=18,
+        fontweight="bold",
+        y=0.96
+    )
+
+    plt.tight_layout(
+        rect=[0, 0, 1, 0.91]
+    )
+
+    plt.show()
